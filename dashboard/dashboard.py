@@ -9,6 +9,7 @@ from babel.numbers import format_currency
 st.set_page_config(page_title="Bikeshare Data Dashboard 🚲", layout="wide")
 
 # --- LOAD DATA ---
+@st.cache_data
 def load_data():
     current_dir = os.path.dirname(__file__)
     file_path = os.path.join(current_dir, "main_data.csv")
