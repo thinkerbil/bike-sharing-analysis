@@ -37,10 +37,8 @@ with st.sidebar:
     )
 
 # Filter dataframe berdasarkan sidebar
-filtered_df = main_df[(main_df["dteday"] >= str(start_date)) & 
-                       (main_df["dteday"] <= str(end_date))]
-
-filtered_df['dteday'] = pd.to_datetime(filtered_df['dteday'])
+mask = (main_df["dteday"] >= pd.to_datetime(start_date)) & (main_df["dteday"] <= pd.to_datetime(end_date))
+filtered_df = main_df.loc[mask].copy()
 
 # --- HEADER ---
 st.title("🚲 Capital Bikeshare: Business Performance Dashboard")
@@ -65,7 +63,9 @@ st.divider()
 
 # --- PERTANYAAN 1: TREN BULANAN ---
 st.subheader("Pertumbuhan Tren Bulanan (2011 vs 2012)")
-monthly_df = filtered_df.resample(rule='M', on='dteday').agg({"cnt": "sum"}).reset_index()
+monthly_df = filtered_df.groupby(filtered_df['dteday'].dt.to_period('M')).agg({"cnt": "sum"}).reset_index()
+monthly_df['dteday'] = monthly_df['dteday'].dt.to_timestamp()
+
 fig, ax = plt.subplots(figsize=(16, 6))
 ax.plot(monthly_df["dteday"], monthly_df["cnt"], marker='o', linewidth=2, color="#396EB0")
 ax.set_title("Jumlah Penyewaan Sepeda per Bulan", loc="center", fontsize=18)
