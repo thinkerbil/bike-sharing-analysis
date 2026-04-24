@@ -1,4 +1,5 @@
 # 🚲 Capital Bikeshare: Business Performance Dashboard
+![Preview Dashboard](./dashboard/preview.jpeg)
 
 Dashboard interaktif ini dibuat menggunakan Streamlit untuk menganalisis tren penyewaan sepeda berdasarkan berbagai faktor, seperti cuaca, waktu (jam), dan profil hari (hari kerja vs hari libur).
 
