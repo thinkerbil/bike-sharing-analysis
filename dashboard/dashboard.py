@@ -1,109 +1,97 @@
-import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
-from babel.numbers import format_currency
 
-# Set konfigurasi halaman
-st.set_page_config(page_title="Bikeshare Data Dashboard 🚲", layout="wide")
+# Konfigurasi gaya seaborn
+sns.set(style='dark')
 
-# --- LOAD DATA ---
-@st.cache_data
-def load_data():
-    current_dir = os.path.dirname(__file__)
-    file_path = os.path.join(current_dir, "main_data.csv")
-    
-    df = pd.read_csv(file_path)
-    df['dteday'] = pd.to_datetime(df['dteday'])
-    return df
+# Helper function untuk menyiapkan data
+def create_daily_rent_df(df):
+    daily_rent_df = df.resample(rule='D', on='dteday').agg({
+        "cnt": "sum"
+    }).reset_index()
+    return daily_rent_df
 
-main_df = load_data()
+def create_by_season_df(df):
+    return df.groupby("season").cnt.mean().reset_index()
 
-# --- SIDEBAR FILTER ---
+def create_hourly_pattern_df(df):
+    return df.groupby(["hr", "workingday"]).cnt.mean().reset_index()
+
+def create_weather_impact_df(df):
+    return df.groupby("weathersit").cnt.mean().reset_index()
+
+# Load data
+main_df = pd.read_csv("dashboard/main_data.csv")
+main_df["dteday"] = pd.to_datetime(main_df["dteday"])
+
+# --- SIDEBAR (FILTER INTERAKTIF) ---
 with st.sidebar:
+    st.title("Bike Sharing Filter 🚲")
     st.sidebar.image("https://raw.githubusercontent.com/thinkerbil/submission-bike-sharing/main/logo.png", use_container_width=True)
-    st.title("Filter Panel")
     
-    # Filter rentang waktu
+    # Mengambil rentang waktu dari data
     min_date = main_df["dteday"].min()
     max_date = main_df["dteday"].max()
     
     start_date, end_date = st.date_input(
-        label='Rentang Waktu',
+        label='Pilih Rentang Waktu',
         min_value=min_date,
         max_value=max_date,
         value=[min_date, max_date]
     )
 
-# Filter dataframe berdasarkan sidebar
-mask = (main_df["dteday"] >= pd.to_datetime(start_date)) & (main_df["dteday"] <= pd.to_datetime(end_date))
-filtered_df = main_df.loc[mask].copy()
+# Menghubungkan Filter ke Dataframe Utama
+main_df = main_df[(main_df["dteday"] >= str(start_date)) & 
+                (main_df["dteday"] <= str(end_date))]
 
-# --- HEADER ---
-st.title("🚲 Capital Bikeshare: Business Performance Dashboard")
-st.markdown("Dashboard ini menyajikan analisis mendalam tentang perilaku penyewa sepeda berdasarkan waktu, cuaca, dan profil hari.")
+# Menyiapkan DataFrame yang sudah terfilter
+daily_rent_df = create_daily_rent_df(main_df)
+by_season_df = create_by_season_df(main_df)
+hourly_pattern_df = create_hourly_pattern_df(main_df)
+weather_impact_df = create_weather_impact_df(main_df)
 
-# --- MAIN METRICS ---
-col1, col2, col3, col4 = st.columns(4)
+# --- DASHBOARD MAIN PAGE ---
+st.header('Bike Sharing Interactive Dashboard')
+
+# 1. Metrik Utama (KPIs)
+col1, col2, col3 = st.columns(3)
 with col1:
-    total_rentals = filtered_df['cnt'].sum()
-    st.metric("Total Peminjaman", value=f"{total_rentals:,}")
+    st.metric("Total Rentals", value=f"{main_df.cnt.sum():,}")
 with col2:
-    casual_rentals = filtered_df['casual'].sum()
-    st.metric("Penyewa Casual", value=f"{casual_rentals:,}")
+    st.metric("Registered Users", value=f"{main_df.registered.sum():,}")
 with col3:
-    reg_rentals = filtered_df['registered'].sum()
-    st.metric("Penyewa Terdaftar", value=f"{reg_rentals:,}")
-with col4:
-    avg_temp = f"{filtered_df['temp'].mean() * 41:.1f}°C"
-    st.metric("Rata-rata Suhu", value=avg_temp)
+    st.metric("Casual Users", value=f"{main_df.casual.sum():,}")
 
-st.divider()
-
-# --- PERTANYAAN 1: TREN BULANAN ---
-st.subheader("Pertumbuhan Tren Bulanan (2011 vs 2012)")
-monthly_df = filtered_df.groupby(filtered_df['dteday'].dt.to_period('M')).agg({"cnt": "sum"}).reset_index()
-monthly_df['dteday'] = monthly_df['dteday'].dt.to_timestamp()
-
-fig, ax = plt.subplots(figsize=(16, 6))
-ax.plot(monthly_df["dteday"], monthly_df["cnt"], marker='o', linewidth=2, color="#396EB0")
-ax.set_title("Jumlah Penyewaan Sepeda per Bulan", loc="center", fontsize=18)
+# 2. Tren Harian
+st.subheader('Daily Rentals Trend')
+fig, ax = plt.subplots(figsize=(16, 8))
+ax.plot(daily_rent_df["dteday"], daily_rent_df["cnt"], marker='o', linewidth=2, color="#3498db")
 st.pyplot(fig)
 
-# --- PERTANYAAN 2 & 4: CUACA & HARI LIBUR ---
-col_a, col_b = st.columns(2)
+# 3. Musim & Cuaca
+st.subheader("Impact of Season and Weather")
+col1, col2 = st.columns(2)
 
-with col_a:
-    st.subheader("Dampak Kondisi Cuaca")
-    weather_df = filtered_df.groupby("weathersit").cnt.mean().reset_index()
-    fig, ax = plt.subplots(figsize=(10, 6))
-    colors = ["#396EB0", "#DADADA", "#DADADA", "#DADADA"]
-    sns.barplot(x="weathersit", y="cnt", data=weather_df, palette=colors, ax=ax)
-    ax.set_xticklabels(['Cerah', 'Mendung', 'Hujan/Salju Ringan', 'Cuaca Ekstrem'])
+with col1:
+    fig, ax = plt.subplots(figsize=(12, 8))
+    sns.barplot(x="season", y="cnt", data=by_season_df, palette="viridis", ax=ax)
+    ax.set_title("Average Rentals by Season")
     st.pyplot(fig)
 
-with col_b:
-    st.subheader("Hari Libur vs Hari Biasa")
-    holiday_df = filtered_df.groupby("holiday").cnt.mean().reset_index()
-    fig, ax = plt.subplots(figsize=(10, 6))
-    sns.barplot(x="holiday", y="cnt", data=holiday_df, palette=["#396EB0", "#FC9918"], ax=ax)
-    ax.set_xticklabels(['Hari Biasa', 'Hari Libur'])
+with col2:
+    fig, ax = plt.subplots(figsize=(12, 8))
+    sns.barplot(x="weathersit", y="cnt", data=weather_impact_df, palette="magma", ax=ax)
+    ax.set_title("Average Rentals by Weather")
     st.pyplot(fig)
 
-# --- PERTANYAAN 3: POLA JAM (LENGKAP DENGAN MUSIM) ---
-st.subheader("Pola Penyewaan Berdasarkan Jam & Hari Kerja")
-fig, ax = plt.subplots(figsize=(16, 7))
-sns.pointplot(data=filtered_df, x='hr', y='cnt', hue='workingday', palette={0: "#FC9918", 1: "#396EB0"}, ax=ax)
-ax.set_title("Distribusi Penyewaan Per Jam (0: Akhir Pekan, 1: Hari Kerja)")
+# 4. Pola Jam
+st.subheader("Hourly Patterns: Working Day vs Weekend")
+fig, ax = plt.subplots(figsize=(16, 8))
+sns.pointplot(data=hourly_pattern_df, x='hr', y='cnt', hue='workingday', ax=ax)
+ax.set_xlabel("Hour (0-23)")
+ax.set_ylabel("Average Rentals")
 st.pyplot(fig)
 
-# --- PERTANYAAN 5: ANALISIS RFM (TIME SEGMENTATION) ---
-st.subheader("Analisis Performa Berdasarkan Hari (RFM Terapan)")
-# Kita sederhanakan untuk dashboard: Melihat hari dengan volume tertinggi
-top_days = filtered_df.sort_values(by="cnt", ascending=False).head(10)
-st.write("10 Hari dengan Volume Penyewaan Tertinggi:")
-st.table(top_days[['dteday', 'cnt', 'temp', 'weathersit']].head(5))
-
-# --- FOOTER ---
-st.caption('Copyright © 2026 - Bike Sharing Analysis Project')
+st.caption('Copyright (c) Nabila Najwa Husna 2026')
